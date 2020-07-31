@@ -1,124 +1,158 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from random import randrange
-from matplotlib import cm
+from simulator import *
 
-# Define necessary functions
-def numberOfLocal(i, j):
-    local_infected = 0
-    if (population[(i-1) % SQRT_POPULATION_SIZE][(j-1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[i % SQRT_POPULATION_SIZE][(j-1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[(i+1) % SQRT_POPULATION_SIZE][(j-1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[(i-1) % SQRT_POPULATION_SIZE][j % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[(i+1) % SQRT_POPULATION_SIZE][j % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[(i-1) % SQRT_POPULATION_SIZE][(j+1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[i % SQRT_POPULATION_SIZE][(j+1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    if (population[(i+1) % SQRT_POPULATION_SIZE][(j+1) % SQRT_POPULATION_SIZE] > 0):
-        local_infected += 1
-    return local_infected
+# Plot the simulation using the parameters
+def plot_simulation(total_infected_time, new_case_infected_time, time_list, population=None):
+    plt.subplot(2, 1, 1)
+    plt.scatter(time_list[:-1], new_case_infected_time)
+    plt.title('Time vs Cases')
+    plt.xlabel('Time')
+    plt.ylabel('New Cases')
 
-def generateCoordinates(m, length):
-  seen = set()
-  x, y = randrange(m), randrange(m)
-  i = 0
-  while i < length:
-    seen.add((x, y))
-    x, y = randrange(m), randrange(m)
-    while (x, y) in seen:
-      x, y = randrange(m), randrange(m)
-    i += 1
-  return seen
+    plt.subplot(2, 1, 2)
+    plt.scatter(time_list, total_infected_time)
+    plt.xlabel('Time')
+    plt.ylabel('Total Cases')
+    #plt.matshow(population, cmap=plt.cm.PuBu)
+    plt.show()
 
-# Initialize constants
-WAS_INFECTED = -1
-NOT_INFECTED = 0
-GOT_INFECTED = 1
+# Simulate multiple runs
+def simulate_multiple(epoches, case=0, attack_rate=0.1, gathering_size=100, return_value=0):
+    total_sum = np.array([])
+    current_sum = np.array([])
+    new_case_sum = np.array([])
+    infected_maxes = []
+    peak_indicies = []
+    peaks = []
+    for k in range(epoches):
+        total, current, new_cases, time, population = simulate(case=case,
+                                                sqrt_population_size=100, time_of_sickness=14,
+                                                total_time_steps=300,
+                                                attack_rate=attack_rate,
+                                                global_susceptivity_mean=0, global_susceptivity_std=0,
+                                                local_susceptivity_mean=0, local_susceptivity_std=0,
+                                                initial_infected=0.002, 
+                                                total_neighbors=4,
+                                                gathering_size=gathering_size, gathering_probability=0.5,
+                                                gathering_frequency=1, gathering_number=4)
+        
+        infected_maxes.append(np.argmax(total))
+        peak_indicies.append(np.argmax(new_cases))
+        peaks.append(max(new_cases))
+        
+        if (len(total_sum) == 0):
+            total_sum = np.array(total)
+            current_sum = np.array(current)
+            new_case_sum = np.array(new_cases)
+        else:
+            total_sum = np.array(total) + total_sum
+            current_sum = np.array(current) + current_sum
+            new_case_sum = np.array(new_cases) + new_case_sum
+    if (return_value==0):
+        print("Summaries:")
+        print(np.mean(infected_maxes))
+        print(total_sum[-1]/epoches)
+        return np.mean(infected_maxes), total_sum[-1]/epoches, np.mean(peaks), np.mean(peak_indicies)
+    elif (return_value==1):
+        print("Done")
+        print(np.mean(peak_indicies))
+        print(np.mean(peaks))
+        return total_sum/epoches, new_case_sum/epoches, time
+    return
 
-# Assume that infectivity is constant, in reality, it is best modeled by Gamma
-INFECTIVITY = 0.5
+# Vary the attack_rate
+def vary_attack_rate(epoches, case=0):
+    attack_rate_array = [0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 0.8, 1]
+    # attack_rate_array = [0.02, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.8, 1]
+    inf_max_arr = []
+    inf_total_arr = []
+    inf_peak_time_arr = []
+    inf_peak_cases_arr = []
+    for value in attack_rate_array:
+        mx, tot, pk, pki = simulate_multiple(epoches, case=case, attack_rate=value)
+        inf_max_arr.append(mx)
+        inf_total_arr.append(tot)
+        inf_peak_time_arr.append(pki)
+        inf_peak_cases_arr.append(pk)
 
-# Assume the susceptivity response factors are normally distributed
-GLOBAL_SUSCEPTIVITY_MEAN = 0.5
-GLOBAL_SUSCEPTIVITY_STD = 0.5
-LOCAL_SUSCEPTIVITY_MEAN = 0.5
-LOCAL_SUSCEPTIVITY_STD = 0.5
+    plt.subplot(4, 1, 1)
+    plt.scatter(attack_rate_array, inf_max_arr)
+    plt.title('Attack Rate vs Duration and Total')
+    plt.xlabel('Attack Rate')
+    plt.ylabel('Duration')
 
-TIME_OF_SICKNESS = 14
-TOTAL_TIME_STEPS = 100
+    plt.subplot(4, 1, 2)
+    plt.scatter(attack_rate_array, inf_total_arr)
+    plt.xlabel('Attack Rate')
+    plt.ylabel('Total')  
 
-TOTAL_NEIGHBORS = 8
-SQRT_POPULATION_SIZE = 100
-INITIAL_INFECTED = 0.05
+    plt.subplot(4, 1, 3)
+    plt.scatter(attack_rate_array, inf_peak_time_arr)
+    plt.xlabel('Attack Rate')
+    plt.ylabel('Peak Times')
 
-# Initialize a matrix and global values
-population = np.zeros((SQRT_POPULATION_SIZE, SQRT_POPULATION_SIZE))
-global_factors = np.zeros((SQRT_POPULATION_SIZE, SQRT_POPULATION_SIZE))
-local_factors = np.zeros((SQRT_POPULATION_SIZE, SQRT_POPULATION_SIZE))
+    plt.subplot(4, 1, 4)
+    plt.scatter(attack_rate_array, inf_peak_cases_arr)
+    plt.xlabel('Attack Rate')
+    plt.ylabel('Peak Cases')
+    plt.show()
 
-for i in range(SQRT_POPULATION_SIZE):
-    for j in range(SQRT_POPULATION_SIZE):
-        global_factors[i][j] = np.random.normal(GLOBAL_SUSCEPTIVITY_MEAN, GLOBAL_SUSCEPTIVITY_STD)
-        local_factors[i][j] = np.random.normal(LOCAL_SUSCEPTIVITY_MEAN, LOCAL_SUSCEPTIVITY_STD)
+# Vary the gathering size
+########################
+#
+#
+# TODO: Fix current cases to new cases
+#
+#
+########################
+def vary_gathering_size(epoches, case=1):
+    gathering_size_arr = [0, 100, 200, 500, 1000, 5000, 10000]
+    # inf_max_arr = []
+    # inf_total_arr = []
+    for value in gathering_size_arr:
+        # mx, tot = simulate_multiple(epoches, case=case, gathering_size=value)
+        total, current, time = simulate_multiple(epoches, case=case, gathering_size=value, return_value=1)
+        plt.scatter(time, current)
+        # inf_max_arr.append(mx)
+        # inf_total_arr.append(tot)
+    plt.show()
 
-total_infected = 0
-current_active_infected = 0
-total_infected_time = []
-current_infected_time = []
-time = 0
+    # plt.subplot(2, 1, 1)
+    # plt.scatter(gathering_size_arr, inf_max_arr)
+    # plt.title('attack_rate vs Duration and Total')
+    # plt.xlabel('Gathering Size')
+    # plt.ylabel('Duration')
 
+    # plt.subplot(2, 1, 2)
+    # plt.scatter(gathering_size_arr, inf_total_arr)
+    # plt.xlabel('Gathering Size')
+    # plt.ylabel('Total')  
+    # plt.show()
 
-# Initialize the infected
-coordinates = generateCoordinates(SQRT_POPULATION_SIZE, INITIAL_INFECTED*(SQRT_POPULATION_SIZE**2))
-for coord in coordinates:
-    population[coord[0]][coord[1]] = GOT_INFECTED
-    total_infected += 1
-    current_active_infected += 1
-total_infected_time.append(total_infected)
-current_infected_time.append(current_active_infected)
+def main():
+    epoches = 5
+    random.seed(22)
 
-# Simulate
-while (time < TOTAL_TIME_STEPS):
-    print(time)
-    for i in range(SQRT_POPULATION_SIZE):
-        for j in range(SQRT_POPULATION_SIZE):
-            #print(i)
-            #print(j)
+    NO_GATHERING = 0
+    SINGLE_REPEATED = 1
+    MULTIPLE_REPEATED = 2
+    MULTIPLE_RANDOM = 3
 
-            # If infected, increase the duration of sickness
-            if (population[i][j] > NOT_INFECTED):
-                population[i][j] += 1
+    # See how attack_rate compares to pandemic duration and total number of cases
+    vary_attack_rate(epoches)
 
-                # If duration of sickness exceeds the max time of sickness, change to WAS_INFECTED
-                if (population[i][j] > TIME_OF_SICKNESS):
-                    population[i][j] = WAS_INFECTED
-                    current_active_infected -= 1
+    # See how gathering size compares to pandemic duration and total number of cases
+    # at 1 gathering meeting at every 1 time step
+    #vary_gathering_size(epoches)
 
-            # If not infected, check the neighbors' status and determine whether infected
-            elif (population[i][j] == NOT_INFECTED):
-                infected_neighbors = numberOfLocal(i, j)
-                if (infected_neighbors > 0):
-                    percent_local_infected = infected_neighbors / TOTAL_NEIGHBORS
-                    percent_current_infected = current_active_infected / (SQRT_POPULATION_SIZE ** 2)
+    # total, new_case, time = simulate_multiple(epoches, case=NO_GATHERING, attack_rate=0.1, return_value=1)
+    # plot_simulation(total_infected_time=total, new_case_infected_time=new_case, time_list=time)
 
-                    # We assume that the odds of susceptivity are exponentially distributed
-                    susceptibility = 1 / (1 + np.exp(-1 * (percent_local_infected * local_factors[i][j] + percent_current_infected * global_factors[i][j])))
-                    if (np.max(np.random.random(infected_neighbors)) < INFECTIVITY * susceptibility):
-                        population[i][j] = GOT_INFECTED
-                        total_infected += 1
-                        current_active_infected += 1
-    total_infected_time.append(total_infected)
-    current_infected_time.append(current_active_infected)
-    time += 1
+    #simulate_multiple(epoches, case=NO_GATHERING)
+    #simulate_multiple(epoches, case=SINGLE_REPEATED)
+    #simulate_multiple(epoches, MULTIPLE_REPEATED)
+    #simulate_multiple(epoches, MULTIPLE_RANDOM)
+    
+    #plotSimulation(total_infected_time=total_sum/epoches, current_infected_time=current_sum/epoches, time_list=time, population=population)
 
-time_list = [i for i in range(TOTAL_TIME_STEPS+1)]
-plt.scatter(time_list, current_infected_time)
-plt.scatter(time_list, total_infected_time)
-plt.matshow(population, cmap=plt.cm.PuBu)
-plt.show()
+if __name__ == "__main__":
+    main()
